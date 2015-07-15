@@ -1,0 +1,51 @@
+#!/bin/bash -l
+
+source /etc/profile.d/rvm.sh
+
+RBVERSION=2.2.2
+
+if [ -f Gemfile ]; then
+
+ RBVERSION=`grep -E "^ruby.*'$" Gemfile | awk '{ print $2 }' | tr -d \'`
+
+ if [ $RBVERSION ]; then
+    echo "The version of Ruby found in Gemfile is $RBVERSION"
+ else
+    echo "Required Ruby version was not specified in Gemfile, using default 2.2.2"
+    rvm use default
+ fi
+
+ if [ $RBVERSION ]; then
+   if [ $RBVERSION = "2.0.0" -o $RBVERSION = "2.1.5" -o $RBVERSION = "2.2.2" ]; then
+       rvm use $RBVERSION
+   else
+       echo "Ruby version specified in Gemfile isn't supported, valid versions are 2.00, 2.1.5 and 2.2.2, using default 2.2.2"
+       rvm use default
+   fi
+ fi
+else
+    echo "Gemfile does not exists, unable to identify App's required Ruby version, using default 2.2.2"
+    rvm use default
+fi
+
+
+function is_puma_installed() {
+  [ ! -f Gemfile.lock ] && return 1
+  grep ' puma ' Gemfile.lock >/dev/null
+}
+
+set -e
+
+export RACK_ENV=${RACK_ENV:-"production"}
+export RAILS_ENV=${RAILS_ENV:-"${RACK_ENV}"}
+
+if is_puma_installed; then
+  exec bundle exec "puma --config ../etc/puma.cfg"
+else
+  echo "You might consider adding 'puma' into your Gemfile."
+  if [ -f Gemfile ]; then
+    exec bundle exec "rackup -P /tmp/rack.pid --host 0.0.0.0 --port 8080"
+  else
+    exec rackup -P /tmp/rack.pid --host 0.0.0.0 --port 8080
+  fi
+fi
